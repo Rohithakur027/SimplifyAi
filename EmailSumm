@@ -1,0 +1,66 @@
+import json
+import requests
+import os
+
+GEMINI_API_KEY = os.environ.get("API_KEY")
+
+def process_email(email_text):
+    """Sends email text to the Gemini API and extracts structured details."""
+    
+    if not GEMINI_API_KEY:
+        return {"error": "Missing Gemini API key"}
+
+    prompt = f"""
+    You are an AI email assistant that processes emails to extract important details. Follow these constraints:
+
+    1. **Summarization**:
+        - If the email contains an event, meeting, or deadline, summarize it concisely.
+        - If the email is promotional, unimportant, or lacks relevant details, return an empty response.
+
+    2. **Extraction in JSON Format**:
+        - **summary**: A concise summary of the email.
+        - If the email contains an event, extract:
+            - **event_name**: Name of the event (if available).
+            - **date**: The event date(s) in `YYYY-MM-DD` format.
+            - **location**: Venue or platform (if mentioned).
+            - **action_required**: Whether the user needs to take action (e.g., "Register", "RSVP", "Attend", etc.).
+
+    Summarize the below email:
+    Question: {email_text}
+    """
+
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }]
+    }
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+    
+    try:
+        response = requests.post(url, headers={"Content-Type": "application/json"}, json=payload)
+        response.raise_for_status() 
+        
+        return response.json()
+    
+    except requests.exceptions.RequestException as e:
+        return {"error": "Failed to process email", "details": str(e)}
+
+def lambda_handler(event, context):
+    """AWS Lambda entry point."""
+    try:
+        email_text = event.get("email_text")
+
+        if not email_text:
+            return {"statusCode": 400, "body": json.dumps({"error": "Missing email_text"})}
+
+        # Process the email using Gemini API
+        result = process_email(email_text)
+
+        return {
+            "statusCode": 200,
+            "body": json.dumps(result)
+        }
+
+    except Exception as e:
+        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
