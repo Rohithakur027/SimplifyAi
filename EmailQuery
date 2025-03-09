@@ -1,0 +1,57 @@
+import json
+import requests
+import os
+
+GEMINI_API_KEY = os.environ.get("API_KEY")
+
+def extract_info_from_news(news_article, user_query):
+    """Processes a news article and extracts relevant details based on the user query."""
+    if not GEMINI_API_KEY:
+        return {"error": "Missing Gemini API key"}
+
+    prompt = f"""
+    You are an AI news assistant. Your task is to analyze a news article and extract relevant details based on the given user query.
+
+    **Instructions:**
+    - Read the full news article.
+    - Answer the user's query using the most relevant information from the article.
+    - If the answer is not found in the article, respond with "Information not available in the provided news article."
+
+    **User Query:** {user_query}
+
+    **News Article:** {news_article}
+    """
+
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}]
+    }
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+    
+    try:
+        response = requests.post(url, headers={"Content-Type": "application/json"}, json=payload)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"error": "Failed to process request", "details": str(e)}
+
+def lambda_handler(event, context):
+    """AWS Lambda entry point for handling news queries."""
+    try:
+        news_article = event.get("news_article")
+        user_query = event.get("user_query")
+
+        if not news_article or not user_query:
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": "Missing news_article or user_query"})
+            }
+
+        result = extract_info_from_news(news_article, user_query)
+
+        return {
+            "statusCode": 200,
+            "body": json.dumps(result)
+        }
+    except Exception as e:
+        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
