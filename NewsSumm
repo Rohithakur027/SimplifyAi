@@ -1,0 +1,57 @@
+import json
+import requests
+import os
+
+GEMINI_API_KEY = os.environ.get("API_KEY")
+
+def summarize_news(news_text):
+    """Sends news text to the Gemini API and extracts structured details."""
+    if not GEMINI_API_KEY:
+        return {"error": "Missing Gemini API key"}
+
+    # AI Prompt for News Summarization
+    prompt = f"""
+    You are an AI news summarization assistant. Your task is to extract key details from news articles and provide a structured summary. Follow these rules:
+
+    1. **Summarization**:
+        - Provide a concise summary of the news article.
+        - Remove unnecessary details or opinions.
+
+    2. **Extraction in JSON Format**:
+        - **headline**: A short, clear headline summarizing the news.
+        - **summary**: A brief overview of the article.
+
+    Summarize the following news article:
+    {news_text}
+    """
+
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}]
+    }
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+    
+    try:
+        response = requests.post(url, headers={"Content-Type": "application/json"}, json=payload)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"error": "Failed to summarize news", "details": str(e)}
+
+def lambda_handler(event, context):
+    """AWS Lambda entry point for handling news summarization requests."""
+    try:
+        news_text = event.get("news_text")
+
+        if not news_text:
+            return {"statusCode": 400, "body": json.dumps({"error": "Missing news_text"})}
+
+        # Process the news article using Gemini API
+        result = summarize_news(news_text)
+
+        return {
+            "statusCode": 200,
+            "body": json.dumps(result)
+        }
+    except Exception as e:
+        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
